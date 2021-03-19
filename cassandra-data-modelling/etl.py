@@ -9,6 +9,8 @@ import csv
 from cassandra.cluster import Cluster
 
 DB_NAME = 'sparkify'
+
+# This map can be updated to have more table and their property
 TBLS_PROP = {
     "session_activity" : {
         "cols" : {
@@ -44,6 +46,7 @@ TBLS_PROP = {
     }
 }
 
+# this is used for mapping the correct column while doing inserts.
 COL_IDX_MAPPING = {
     "artist" : 0,
     "firstName" : 1,
@@ -58,6 +61,7 @@ COL_IDX_MAPPING = {
     "userId" :10
 }
 
+# this function generate the INSERT query
 def get_tbl_dml(tbl_name, TBLS_PROP):
     prop =  TBLS_PROP.get(tbl_name, None)
     columns = prop.get("cols").keys()
@@ -68,6 +72,7 @@ def get_tbl_dml(tbl_name, TBLS_PROP):
     tpl_exp = [prop["cols"][col]+"({})".format(tpl_exp) if prop["cols"][col]!='text' else tpl_exp for col, tpl_exp in zip(columns, tpl_exp)]
     return dml, tpl_exp
 
+# this function populate the table
 def populate_table(session, table_name, source_file):
     print(f'Populating Table : {table_name}')
     dml, tpl_exp = get_tbl_dml(tbl_name, TBLS_PROP)
@@ -82,6 +87,7 @@ def populate_table(session, table_name, source_file):
             #session.execute(dml, tuple([eval(item) for item in tpl_exp]))
             session.execute(dml, tuple(row))
 
+#this function generate the CREATE statement
 def get_table_ddl(TBLS_PROP, table_name):
     prop =  TBLS_PROP.get(table_name, None)
     ddl = f'CREATE TABLE IF NOT EXISTS {table_name} '
@@ -94,6 +100,7 @@ def get_table_ddl(TBLS_PROP, table_name):
         ddl += ", PRIMARY KEY ({}));".format(", ".join(prop["pkey"]))
     return ddl
 
+# This function creates table based on the map.
 def create_table(session, table_name):
     print(f'Creating Table : {table_name}')
     sql = get_table_ddl(TBLS_PROP, table_name)
@@ -102,7 +109,7 @@ def create_table(session, table_name):
     except Exception as e:
         print(e)
 
-
+# This function creates Keyspace and sets it default
 def set_up_db(session, db_name):
     print(f'Creating Keyspace : {db_name}')
     db_conf = {'class': 'SimpleStrategy', 'replication_factor': 1}
@@ -113,12 +120,14 @@ def set_up_db(session, db_name):
     except Exception as e:
         print(e)
 
+# Function to get Cassandra cluster
 def set_up_cluster():
     print('Setting up the Cassandra cluster')
     cluster = Cluster()
     session = cluster.connect()
     return session
 
+# This functions  combines all data into single file with relevant columns
 def preprocess_data():
     print("Running preprocessing steps")
     data_dir = os.path.join(os.getcwd(),'event_data')
@@ -140,6 +149,7 @@ def preprocess_data():
             if (row[0] != ''):
                 writer.writerow((row[0], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[12], row[13], row[16]))
 
+# Function to drop tables
 def drop_table(session, table_name):
     try:
         session.execute(f'DROP TABLE IF EXISTS {table_name}')
@@ -163,11 +173,12 @@ if __name__=='__main__':
         rows = session.execute(query)
     except Exception as e:
         print(e)
-
+        
+    #below code runs a query and verifies whether data is correctly loaded or not
     res = pd.DataFrame(rows._current_rows)
     d = {"firstname": ["Jacqueline", "Tegan", "Sara"], "lastname": ["Lynch", "Levine", "Johnson"]}
     expected = pd.DataFrame(d)
-    assert res.equals(expected)
+    assert res.equals(expected) # will throw error if the df does not match
 
     for tbl_name in TBLS_PROP.keys():
         drop_table(session, tbl_name)
